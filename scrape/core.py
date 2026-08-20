@@ -13,6 +13,11 @@ from markdownify import markdownify as html_to_md
 MIN_DELAY_SECONDS = 1.5
 MAX_DELAY_SECONDS = 3.0
 
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+}
+
 # Print URL + status code
 def fetch(url: str) -> str:
     resp = requests.get(url, headers=REQUEST_HEADERS, timeout=20)
@@ -21,7 +26,7 @@ def fetch(url: str) -> str:
     return resp.text
 
 def slugify(text: str) -> str:
-    text = unicodedata.normalize("NFKD", text).encode("ascii", "igonore").decode("ascii")
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     text = text.strip().lower()
     text = re.sub(r"[^a-z0-9]+", "-", text)
     return text.strip("-") or "untitled"

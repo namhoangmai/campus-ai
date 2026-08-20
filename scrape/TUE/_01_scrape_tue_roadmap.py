@@ -1,14 +1,16 @@
 import json
 import re
+import sys
 import time
 import random
 from dataclasses import dataclass
 from pathlib import Path
 from itertools import product
 
-import pycountry
 import requests
 from bs4 import BeautifulSoup
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import (
     REQUEST_HEADERS,
@@ -262,3 +264,98 @@ def verify_country_slugs(codes_to_use, country_label_by_code, sample_type_slug, 
         if not working:
             print(f"[DEBUG] verify_country_slugs() {code}: NO WORKING SLUG FOUND -- needs manual check")
     return results
+
+"""
+Fetch, clean, and save each target
+"""
+
+FOOTER_START_MARKERS = [
+    "TU/e Image Bank",
+    "Bachelor programs", 
+]
+
+BREADCRUMB_LINE_RE = re.compile(r"^\d+\.\s*\[.+?\]\(.+?\)", re.MULTILINE)
+
+CONTENT_START_MARKERS = [
+    "## Roadmap",
+]
+
+def clean_main_content(html: str) -> tuple[str, str]:
+    """TU/e-scoped wrapper around core.clean_main_content(), 
+        pinned to TU/e's own boilerplate markers (footer sidebar, roadmap-form skip, breadcrumb pattern)."""
+    return _clean_main_content(
+        html,
+        footer_start_markers=FOOTER_START_MARKERS,
+        content_start_markers=CONTENT_START_MARKERS,
+        breadcrumb_re=BREADCRUMB_LINE_RE,
+    )
+
+
+def save_target(target: RoadmapTarget, html: str):
+    title, body = clean_main_content(html)
+    fname = slugify(f"{target.program_type_slug}-{target.program_slug}-{target.country_slug}")
+    return save_page(
+        OUTPUT_DIR,
+        fname,
+        title,
+        target.url,
+        body,
+        extra_front_matter={
+            "program_type": target.program_type_label,
+            "program": target.program_label,
+            "country": target.country_label,
+        },
+    )
+ 
+def main():
+    print(f"[DEBUG] main() -> DRY_RUN={DRY_RUN}")
+    print("Discovering real program labels and country labels from dropdown HTML...")
+    program_types, programs_by_type, country_label_by_code = discover_roadmap_slugs()
+ 
+    print("Verifying program slug guesses against the live site (Netherlands)...")
+    verified = verify_program_slugs(program_types, programs_by_type, country_label_by_code)
+    failed = [k for k, v in verified.items() if v is None]
+    if failed:
+        print(f"WARNING: {len(failed)} program(s) had NO working slug guess: {failed}")
+        print("These need manual inspection (open the program in a browser and "
+              "check the address bar) before they'll scrape correctly.")
+
+    sample_key = next((k for k, v in verified.items() if v), None)
+    if not sample_key:
+        raise RuntimeError("No verified program slug available to use as a sample for country verification.")
+    sample_type_slug, _sample_prog_label = sample_key
+    sample_program_slug = verified[sample_key]
+
+    print("Verifying country slug guesses (English, then Dutch spellings) against the live site...")
+    codes_to_use = list(country_label_by_code.keys())
+    verified_countries = verify_country_slugs(
+        codes_to_use, country_label_by_code, sample_type_slug, sample_program_slug
+    )
+    failed_countries = [c for c, v in verified_countries.items() if v is None]
+    if failed_countries:
+        print(f"WARNING: {len(failed_countries)} country code(s) had NO working slug guess: {failed_countries}")
+        print("These need manual inspection (open the country in a browser and "
+              "check the address bar) before they'll scrape correctly.")
+
+    targets = build_scoped_targets(program_types, programs_by_type, verified, verified_countries)
+    print(f"Built {len(targets)} scoped targets "
+          f"(vs. {len(programs_by_type) * len(country_label_by_code)} if scraping every country).")
+ 
+    if DRY_RUN:
+        print("DRY_RUN=True -- printing first 10 URLs and stopping.")
+        for t in targets[:10]:
+            print(t.url)
+        return
+ 
+    for i, target in enumerate(targets, 1):
+        try:
+            html = fetch(target.url)
+            path = save_target(target, html)
+            print(f"[{i}/{len(targets)}] saved {path}")
+        except requests.HTTPError as e:
+            print(f"[{i}/{len(targets)}] FAILED {target.url}: {e}")
+        time.sleep(random.uniform(MIN_DELAY_SECONDS, MAX_DELAY_SECONDS))
+ 
+ 
+if __name__ == "__main__":
+    main()
