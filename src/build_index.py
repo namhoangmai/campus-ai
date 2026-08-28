@@ -90,3 +90,42 @@ def build_index() -> int:
     collection.add(ids=ids, documents=texts, metadatas=metadatas)
     print(f"[build index] indexed {len(texts)} chunks into '{COLLECTION_NAME}' at {VECTORSTORE_DIR}")
     return len(texts)
+
+def upsert_document(
+    source: str,
+    title: str,
+    source_url: str,
+    content: str,
+    extra_metadata: dict | None = None,
+) -> int:
+    """
+    Add or update one document's chunks in the persistent collection
+    
+    Used by live scraping
+    """
+    client = get_client()
+    collection = client.get_or_create_collection(
+        name=COLLECTION_NAME, embedding_function=get_embedding_function()
+    )
+    
+    # rescraping can change its chunk, so drop previous chunks and add new ones
+    collection.delete(where={"source": source})
+    
+    ids, texts, metadatas = chunk_document(
+        {
+            "source": source,
+            "title": title,
+            "source_url": source_url,
+            "content": content,
+            "extra_metadata": extra_metadata,
+        }
+    )
+    if not texts:
+        print(f"[build index] upsert_document({source!r}) -> no chunks, nothing to index")
+        return 0
+    
+    collection.upsert(ids=ids, documents=texts, metadatas=metadatas)
+    print(f"[build index] upsert_document({source!r}) -> {len(texts)} chunk(s) indexed at {VECTORSTORE_DIR}")
+    
+if __name__ == "__main__":
+    build_index()
