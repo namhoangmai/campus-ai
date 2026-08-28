@@ -39,3 +39,27 @@ def load_raw_docs(raw_dir: Path) -> list[dict]:
             content = md_file.read_text(encoding="utf-8")
         docs.append({"source": md_file.name, "title": title, "source_url": source_url, "content": content})
     
+def chunk_document(doc: dict) -> tuple[list[str], list[str], list[dict]]:
+    """
+    Split one doc into chunk ids / texts / metadatas
+    """
+    splitter = MarkdownHeaderTextSplitter(headers_to_split_on=HEADERS, strip_headers=False)
+    chunks = splitter.split_text(doc["content"])
+    
+    ids, texts, metadatas = [], [], []
+    for i, chunk in enumerate(chunks):
+        if not chunk.page_content.strip():
+            continue
+        ids.append(f"{doc['source']}::{i}")
+        texts.append(chunk.page_content)
+        metadata = {
+            "source": doc["source"],
+            "title": doc["title"],
+            "source_url": doc.get("source_url", ""),
+            "chunk_index": i,
+        }
+        metadata.update(doc.get("extra_metadata") or {})
+        metadata.update(chunk.metadata)
+        metadatas.append(metadata)
+    return ids, texts, metadatas
+
