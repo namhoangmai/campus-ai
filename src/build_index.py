@@ -63,3 +63,30 @@ def chunk_document(doc: dict) -> tuple[list[str], list[str], list[dict]]:
         metadatas.append(metadata)
     return ids, texts, metadatas
 
+def build_index() -> int:
+    client = get_client()
+    existing = {c.name for c in client.list_collections()}
+    if COLLECTION_NAME in existing:
+        client.delete_collection(COLLECTION_NAME)
+        
+    collection = client.create_collection(
+        name=COLLECTION_NAME, embedding_function=get_embedding_function()
+    )
+    
+    docs = load_raw_docs(RAW_DIR)
+    print(f"[build_index] loaded {len(docs)} file(s) from {RAW_DIR}")
+    
+    ids, texts, metadatas = [], [], []
+    for doc in docs:
+        doc_ids, doc_texts, docs_metadata = chunk_document(doc)
+        ids.extend(doc_ids)
+        texts.extend(doc_texts)
+        metadatas.extend(doc_metadatas)
+        
+    if not texts:
+        print("[build index] no chunks to index")
+        return 0
+    
+    collection.add(ids=ids, documents=texts, metadatas=metadatas)
+    print(f"[build index] indexed {len(texts)} chunks into '{COLLECTION_NAME}' at {VECTORSTORE_DIR}")
+    return len(texts)
