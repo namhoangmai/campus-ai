@@ -56,8 +56,6 @@ Private rentals offer more flexibility, but they also require more effort. You�
 
 Commercial housing agencies often charge a service fee. This fee varies by agency but is usually a few hundred euros. Rental agreement terms vary but usually require a minimum stay of 6 to 12 months. After that, you can cancel with one month’s notice.
 
-Play video
-
 ## How to search?
 
 To help you get started with your housing search in the private market, we’ve compiled a housing toolkit that lists commonly used platforms and agencies along with practical guidance on how to contact landlords or student housing providers. This overview includes different types of housing providers, from social housing corporations to commercial rental platforms, as well as other tips on writing to a landlord and going to a viewing.
@@ -75,21 +73,10 @@ You can also explore [Plaza Resident Services](https://plaza.newnewnew.space/aa
 [### Vestide](https://rooms.vestide.nl/en/subscribe/#question-0)
 [### Plaza Resident Services](https://plaza.newnewnew.space/aanbod/wonen#?gesorteerd-op=prijs%2B&locatie=Nederland%2B-%2BNoord-Brabant)
 
-Previous
-
-
-Next
-
-Previous
-
-
-Next
 
 ## Dutch housing allowance
 
 **Housing allowance (rent benefit)** is a subsidy from the Dutch government to help cover rental costs for residents with a low income. To be eligible, you must live in an independent residence with your own front door and private (unshared) facilities, such as a kitchen, bathroom and toilet. If you meet the [requirements](https://www.belastingdienst.nl/wps/wcm/connect/bldcontenten/belastingdienst/individuals/benefits/moving_to_the_netherlands/i_live_in_a_rented_house/i_live_in_a_rented_house), you can apply via the [Belastingdienst](https://www.belastingdienst.nl/wps/wcm/connect/bldcontenten/belastingdienst/individuals/benefits/) (the Dutch Tax Administration).
-
-Play video
 
 ## Be aware of scams
 
@@ -110,32 +97,6 @@ Be cautious with offers that seem too good to be true and never transfer money b
 [### Safe renting & legal advice](/en/education/become-a-tue-student/housing/be-aware-of-scams)
 [### Check out our rental checklist](https://assets.w3.tue.nl/w/fileadmin/Housing%20International/Rental%20checklist.pdf)
 
-Previous
-
-
-Next
-
-Previous
-
-
-Next
-
-## Questions?
-
-If you have any questions about housing, please contact us using the form below.
-
-Name
-\*
-
-Email
-\*
-
-Message
-\*
-
-* Send message
-
-Play video
 
 ## Pas op voor oplichting
 
@@ -143,11 +104,3 @@ Before signing a rental contract or transferring any money, make sure you know w
 
 * [More about safe renting](/en/education/become-a-tue-student/housing/be-aware-of-scams)
 
-
-
-
-
-
-
-
-* [

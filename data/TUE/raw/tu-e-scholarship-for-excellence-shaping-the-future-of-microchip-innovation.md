@@ -103,22 +103,3 @@ Create an account in MyStart@TU/e to stay informed about studying at TU/e and up
 [### Discover our events and activities](/en/education/mystarttue)
 [### Chat with students, alumni & staff](http://www.tue.nl/chat)
 [### Find your brochure](https://start.tue.nl/form/brochures)
-
-Previous
-
-
-Next
-
-Previous
-
-
-Next
-
-
-
-
-
-
-
-
-* [

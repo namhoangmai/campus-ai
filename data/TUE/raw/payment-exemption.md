@@ -29,12 +29,3 @@ For international students
 If you are already paying tuition fees at another college or university, you may be eligible for a reduction or exemption of the tuition fees to be paid. You can request a Proof of Paid Tuition Fees (*Bewijs Betaald Collegegeld*, BBC) from the other educational institution via Studielink.  
    
  It is not possible to later submit a BBC for a refund of tuition fees already paid.
-
-
-
-
-
-
-
-
-* [

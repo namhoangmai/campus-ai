@@ -31,12 +31,3 @@ If you terminate your enrollment at TU/e, you may be entitled to a tuition fee r
 If your enrollment is terminated effective as of July 1 or August 1, you cannot claim a tuition refund for those months.
 
 For more information on the termination of enrollment and tuition fee refunds, see the [education guide](https://educationguide.tue.nl/practical-info/student-administration/termination-of-enrollment).
-
-
-
-
-
-
-
-
-* [

@@ -57,15 +57,6 @@ Available to female master’s students worldwide in nuclear-related fields.](ht
 
 Available for EU students in the SENSE track (within the MSc Electrical Engineering) and SELECT track (within the MSc Sustainable Energy Technology](https://mastersplus.innoenergy.com/fees-and-funding/scholarships/)
 
-Previous
-
-
-Next
-
-Previous
-
-
-Next
 
 ## Please note
 
@@ -96,22 +87,3 @@ Create an account in MyStart@TU/e to stay informed about studying at TU/e and up
 [### Discover our events and activities](/en/education/mystarttue)
 [### Chat with students, alumni & staff](http://www.tue.nl/chat)
 [### Find your brochure](https://start.tue.nl/form/brochures)
-
-Previous
-
-
-Next
-
-Previous
-
-
-Next
-
-
-
-
-
-
-
-
-* [

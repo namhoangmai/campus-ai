@@ -56,12 +56,3 @@ Is your employer paying your tuition fees and would you therefore like to receiv
  Education and Student Affairs, MetaForum 1.300, Postbus 513, 5600 MB Eindhoven.
 
 *Please note: You can only request an invoice when the tuition fees have not yet been paid. The tuition fees will have to be transferred according to the instructions on the invoice.*
-
-
-
-
-
-
-
-
-* [

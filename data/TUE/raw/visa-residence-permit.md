@@ -183,27 +183,3 @@ The rules differ based on your **nationality** and the **type of residence permi
  To avoid confusion and make sure you comply with Dutch regulations, we strongly recommend checking the detailed information before starting a job.
 
 * [Working while studying](/en/education/become-a-tue-student/working-while-studying#c419605)
-
-## Questions?
-
-If you have any general questions about visa or residence permit, please contact us using the form below.
-
-Name
-\*
-
-Email
-\*
-
-Message
-\*
-
-* Send message
-
-
-
-
-
-
-
-
-* [

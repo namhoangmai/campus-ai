@@ -84,27 +84,3 @@ On the website of the [NIBUD](https://www.nibud.nl/consumenten/levenssituaties/s
 ***Living expenses***  
  *Per year a TU/e student needs a budget of at least €10,000-€12,000 for rent, insurance, living expenses, books and local transportation. This is a minimum budget and is in addition to the tuition fee and any expenses incurred travelling from your home country to Eindhoven.*  
  *Rent can vary between**€400 for a room and €700 for a studio.*
-
-## Have a question?
-
-Fill in the contact form below and our team will get back to you.
-
-Name
-\*
-
-Email
-\*
-
-Message
-\*
-
-* Send message
-
-
-
-
-
-
-
-
-* [

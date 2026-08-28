@@ -61,27 +61,3 @@ Ensure that the **full amount** is received by TU/e.  Any bank transfer fees mu
 
 Due to international sanctions, TU/e is unable to accept direct or indirect financial transactions from or involving the following countries: Cuba, Iran, North Korea, Russia, Sudan, and Syria.  
  If you reside in or hold the nationality of one of these countries, do not transfer the application fee. Instead, please provide the requested details in the OSIRIS application form.
-
-## Have a question?
-
-Fill in the contact form below and our team will get back to you.
-
-Name
-\*
-
-Email
-\*
-
-Message
-\*
-
-* Send message
-
-
-
-
-
-
-
-
-* [

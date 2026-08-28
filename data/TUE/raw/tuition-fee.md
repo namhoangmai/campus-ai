@@ -79,27 +79,3 @@ Halfway through the year, any exemptions or additional courses will be settled. 
 | Bachelor and master external students (extraneï) who meet the nationality criteria (EEA) | € 1,347 | 1/2 statutory fee |
 | Bachelor external students (extraneï) who don’t meet the nationality criteria (non-EEA) | € 9,300 | € 11,200 |
 | Master external students (extraneï) who don’t meet the nationality criteria (non-EEA) | € 10,850 | € 11,200 |
-
-## Have a question?
-
-Fill in the contact form below and our team will get back to you.
-
-Name
-\*
-
-Email
-\*
-
-Message
-\*
-
-* Send message
-
-
-
-
-
-
-
-
-* [
