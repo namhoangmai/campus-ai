@@ -1,6 +1,7 @@
 import time
 import random
 from pathlib import Path
+import sys
 
 import requests
 
@@ -25,7 +26,7 @@ STATIC_PAGES = [
     "https://www.tue.nl/en/education/become-a-tue-student/housing",
 ]
 
-DRY_RUN = True # True to check the page first
+DRY_RUN = False # True to check the page first
 
 def save_static_page(url: str, page_html: str) -> Path:
     title, body = clean_main_content(page_html)
