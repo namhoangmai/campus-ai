@@ -131,6 +131,7 @@ def build_messages(question: str, chat_history: list[dict], retrieved_chunks: li
 def generate_answer(
     question: str,
     chat_history: list[dict],
+    retrieved_chunks: list[dict],
     live_page: dict | None,
     config: Config = LLM_CONFIG,
 ) -> str:
