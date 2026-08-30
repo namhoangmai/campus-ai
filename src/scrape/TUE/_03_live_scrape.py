@@ -60,3 +60,49 @@ def _persisted_scraped_page(target: RoadmapTarget, title: str, body: str) -> Non
     except Exception as e:
         print(f"[live scrape] WARNING: scraped {target.url!r} OK but failed to persist it for future retrieval: {e}")
         
+def scrape_selection(
+    program_type_label: str,
+    program_type_slug: str,
+    program_label: str,
+    country_code: str,
+    country_label_by_code: dict[str, str],
+) -> tuple[str, str, str]:
+    """
+    Resolve the working slugs for one program + one country, fetch the final page, save and index for future retrieval
+    """
+    verified_programs = verify_program_slugs(
+        program_types={program_type_label: program_type_slug},
+        programs_by_type={program_type_slug: [("", program_label)]},
+        country_label_by_code=country_label_by_code,
+    )
+    program_slug = verified_programs.get((program_type_slug, program_label))
+    
+    if not program_slug:
+        raise RuntimeError(
+            f"Could not resolve a working URL slug for program {program_label!r} under {program_type_label!r}"
+        )
+        
+    verified_countries = verify_country_slugs(
+        codes_to_use=[country_code],
+        country_label_by_code=country_label_by_code,
+        sample_type_slug=program_type_slug,
+        sample_program_slug=program_slug,
+    )
+    working_country = verified_countries.get(country_code)
+    if not working_country:
+        raise RuntimeError(f"Could not resolve a working URL slug for country code {country_code!r}.")
+    country_label, country_slug = working_country
+    
+    target = RoadmapTarget(
+        program_type_label=program_type_label,
+        program_type_slug=program_type_slug,
+        program_label=program_label,
+        program_slug=program_slug,
+        country_label=country_label,
+        country_slug=country_slug,
+    )
+    
+    html = fetch(target.url)
+    title, body = clean_main_content(html)
+    _persisted_scraped_page(target, title, body)
+    return title, target.url, body
