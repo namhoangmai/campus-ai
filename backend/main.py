@@ -101,4 +101,42 @@ def program_options(program_type_slug: str):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Could not load options: {e}") from e
     return ProgramOptionsResponse(programs=programs, countries=countries)
+
+@app.post("/api/scrape", response_model=ScrapeResponse)
+def scrape(req: ScrapeRequest):
+    try:
+        title, url, body = scrape_selection(
+            program_type_label=req.program_type_label,
+            program_type_slug=req.program_type_slug,
+            program_label=req.program_label,
+            country_code=req.country_code,
+            country_label_by_code=req.country_label_by_code,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not scrape that combination: {e}") from e
+    return ScrapeResponse(title=title, url=url, body=body)
     
+@app.post("/api/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    try:
+        retrieved_chunks = retrieve(req.question, k=4)
+        live_page = req.live_page.model_dump() if req.live_page else None
+        reply = generate_answer(
+            question=req.question,
+            chat_history=[m.model_dump() for m in req.chat_history],
+            retrieved_chunks=retrieved_chunks,
+            live_page=live_page,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not generate an answer: {e}") from e
+    
+    seen = set()
+    sources: list[Source] = []
+    for chunk in retrieved_chunks:
+        url = chunk.get("source_url")
+        title = chunk.get("title")
+        if url and (title, url) not in seen:
+            seen.add((title, url))
+            sources.append(Source(title=title, url=url))
+            
+    return ChatResponse(reply=reply, sources=sources)
