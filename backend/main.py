@@ -44,3 +44,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Schemas
+
+class ProgramOptionsResponse(BaseModel):
+    programs: list[tuple[str, str]]
+    countries: list[tuple[str, str]]
+    
+class ScrapeRequest(BaseModel):
+    program_type_label: str
+    program_type_slug: str
+    program_label: str
+    country_code: str
+    country_label_by_code: dict[str, str]
+    
+class LivePage(BaseModel):
+    title: str
+    url: str
+    body: str
+    
+class ScrapeResponse(BaseModel):
+    title: str
+    url: str
+    body: str
+    
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+    
+class ChatRequest(BaseModel):
+    question: str
+    chat_history: list[ChatMessage] = []
+    live_page: Optional[LivePage] = None
+    
+class Source(BaseModel):
+    title: str
+    url: str
+    
+class ChatResponse(BaseModel):
+    reply: str
+    sources: list[Source]
+    
+# Routes
+
+@app.get("/api/health")
+def health():
+    return{"status": "ok"}
+
+@app.get("/api/program-types")
+def program_types() -> dict[str, str]:
+    return list_program_types()
+
+@app.get("/api/program-options", response_model=ProgramOptionsResponse)
+def program_options(program_type_slug: str):
+    try:
+        programs, countries = list_program_and_country_options(program_type_slug)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not load options: {e}") from e
+    return ProgramOptionsResponse(programs=programs, countries=countries)
+    
