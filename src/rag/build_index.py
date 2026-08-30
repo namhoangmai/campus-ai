@@ -14,11 +14,11 @@ EMBEDDING_MODEL = "BAAI/bge-m3"
 HEADERS = [
     ("#", "h1"),
     ("##", "h2"),
-    ("###", h3),
+    ("###", "h3"),
 ]
 
 def get_client() -> chromadb.ClientAPI:
-    VECTORSTORE_DIR.mkdir(parents=True, exists_ok=True)
+    VECTORSTORE_DIR.mkdir(parents=True, exist_ok=True)
     return chromadb.PersistentClient(path=str(VECTORSTORE_DIR))
 
 def get_embedding_function() -> SentenceTransformerEmbeddingFunction:
