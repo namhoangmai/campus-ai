@@ -36,4 +36,27 @@ def list_program_and_country_options(program_type_slug: str):
     url = f"{BASE_ROADMAP_URL}/{program_type_slug}"
     html = fetch(url)
     fields = discover_select_options(html)
-    return fields.get("program", []), fields.get("country": [])
+    return fields.get("program", []), fields.get("country", [])
+
+def _persisted_scraped_page(target: RoadmapTarget, title: str, body: str) -> None:
+    """
+    Save the scraped page and index it into the vector store
+    """
+    frame = slugify(f"{target.program_type_slug}-{target.program_slug}-{target.country_slug}")
+    extra_front_matter = {
+        "program_type": target.program_type_label,
+        "program": target.program_label,
+        "country": target.country_label,
+    }
+    try:
+        save_page(OUTPUT_DIR, fname, title, target.url, body, extra_front_matter=extra_front_matter)
+        upsert_document(
+            source=f"{fname}.md",
+            title=title,
+            source_url=target.url,
+            content=body,
+            extra_metadata=extra_front_matter,
+        )
+    except Exception as e:
+        print(f"[live scrape] WARNING: scraped {target.url!r} OK but failed to persist it for future retrieval: {e}")
+        
