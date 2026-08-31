@@ -24,7 +24,7 @@ for p in (
 os.chdir(REPO_ROOT)
 
 from _03_live_scrape import list_program_and_country_options, list_program_types, scrape_selection
-from retriever import retrieve
+from retriever import retrieve, get_collection
 from answer import generate_answer
 
 app = FastAPI(title="Campus-AI API")
@@ -85,6 +85,10 @@ class ChatResponse(BaseModel):
     sources: list[Source]
     
 # Routes
+
+@app.on_event("startup")
+def warm_up():
+    get_collection()
 
 @app.get("/api/health")
 def health():

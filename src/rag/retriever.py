@@ -4,6 +4,8 @@ import chromadb
 
 from build_index import COLLECTION_NAME, VECTORSTORE_DIR, get_embedding_function
 
+
+@lru_cache(maxsize=1)
 def get_collection() -> chromadb.Collection:
     client = chromadb.PersistentClient(path=str(VECTORSTORE_DIR))
     return client.get_collection(name=COLLECTION_NAME, embedding_function=get_embedding_function())
