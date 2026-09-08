@@ -1,7 +1,7 @@
 """Read-only access to the vector index built by build_index.py"""
 
 import chromadb
-
+from functools import lru_cache
 from build_index import COLLECTION_NAME, VECTORSTORE_DIR, get_embedding_function
 
 

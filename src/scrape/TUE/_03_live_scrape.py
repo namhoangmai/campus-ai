@@ -42,7 +42,7 @@ def _persisted_scraped_page(target: RoadmapTarget, title: str, body: str) -> Non
     """
     Save the scraped page and index it into the vector store
     """
-    frame = slugify(f"{target.program_type_slug}-{target.program_slug}-{target.country_slug}")
+    fname = slugify(f"{target.program_type_slug}-{target.program_slug}-{target.country_slug}")
     extra_front_matter = {
         "program_type": target.program_type_label,
         "program": target.program_label,

@@ -29,9 +29,9 @@ class Config:
     api_key_env: str
 
 LLM_CONFIG = Config(
-    base_url="https://integrate.api.nvidia.com/v1",
-    model="deepseek-ai/deepseek-v4-flash-0731",
-    api_key_env="DEEPSEEK_API_KEY",
+    base_url="https://openrouter.ai/api/v1",
+    model="deepseek/deepseek-v4-flash-0731",
+    api_key_env="CAMPUS_AI_API_KEY",
 )
 # max_tokens=16384
 
@@ -62,6 +62,9 @@ def call_model_with_retry(
                 model=model,
                 messages=messages,
                 temperature=0,
+                max_tokens=16384,
+                seed=0,
+                extra_body={"reasoning": {"enabled": True}},
                 timeout=timeout_seconds,
             )
             content = response.choices[0].message.content
