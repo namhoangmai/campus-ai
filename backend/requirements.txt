@@ -1,33 +1,33 @@
 # Web framework
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-python-multipart==0.0.12   # required by FastAPI for multipart/form-data (document upload endpoint)
+fastapi
+uvicorn[standard]
+python-multipart  # required by FastAPI for multipart/form-data (document upload endpoint)
 
 # Config / env
-pydantic==2.9.2
-pydantic-settings==2.5.2
-python-dotenv==1.0.1
+pydantic
+pydantic-settings
+python-dotenv
 
 # Control-plane database (Postgres)
-sqlalchemy==2.0.35
-psycopg2-binary==2.9.9
+sqlalchemy
+psycopg2-binary
 
 # Content plane: markdown ingestion
-python-frontmatter==1.1.0
-langchain_text_splitters==0.3.0
+python-frontmatter
+langchain_text_splitters
 
 # Content plane: PDF ingestion
-pdfplumber==0.11.4
+pdfplumber
 
 # Embeddings + vector store
-sentence-transformers==3.1.1
-chromadb==0.5.11
+sentence-transformers
+chromadb
 
 # Generation (OpenRouter)
-openai==1.51.0
+openai
 
 # Admin CLI
-typer==0.12.5
+typer
 
 # NOTE on reranking: v1 carried `FlagEmbedding` as an installed-but-unused dependency earmarked
 # for future reranking. It's deliberately dropped here rather than carried forward again: it
@@ -37,5 +37,5 @@ typer==0.12.5
 # `sentence-transformers`, is already available above) rather than resurrecting a broken pin.
 
 # Tests
-pytest==8.3.3
-httpx==0.27.2
+pytest
+httpx

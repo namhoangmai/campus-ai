@@ -41,7 +41,7 @@ npm run dev
 
 ```
 cd backend
-export CAMPUS_AI_ADMIN_KEY=<the ADMIN_API_KEY you set in .env>
+$env:CAMPUS_AI_ADMIN_KEY=<the ADMIN_API_KEY you set in .env>
 python scripts/admin_cli.py create-tenant --slug tue --name "Eindhoven University of Technology"
 python scripts/admin_cli.py upload --tenant tue --dir ./your-documents/
 ```

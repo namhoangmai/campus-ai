@@ -22,6 +22,15 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Deployment ---
+    # "development" (default) is the zero-config local flow (bare uvicorn + docker-compose
+    # Postgres) and is never validated. Set ENVIRONMENT=production in any real deployment
+    # (ARCHITECTURE.md §9 Tier 1: single instance) to turn on validate_production_settings()
+    # below. Deliberately opt-in rather than "not under pytest": local dev's documented default
+    # DATABASE_URL is byte-for-byte the same as docker-compose's, so a bare "not a test" guard
+    # would also fail a correctly configured local dev environment.
+    environment: str = "development"
+
     # --- Control plane ---
     database_url: str = "postgresql+psycopg2://campus_ai:campus_ai@localhost:5432/campus_ai"
 
@@ -63,3 +72,31 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cached singleton — settings are read from the environment once per process."""
     return Settings()
+
+
+def validate_production_settings(settings: Settings) -> None:
+    """Fail fast at startup if ENVIRONMENT=production but the deployment still carries
+    local/insecure defaults. A no-op unless ENVIRONMENT is explicitly set to "production" (see
+    the `environment` field's docstring for why that's opt-in, not "outside pytest") — called
+    from app/main.py before the app starts serving requests.
+    """
+    if settings.environment != "production":
+        return
+
+    problems: list[str] = []
+    if not settings.admin_api_key:
+        problems.append("ADMIN_API_KEY is empty")
+    if not settings.openrouter_api_key:
+        problems.append("OPENROUTER_API_KEY is empty")
+    local_default = Settings.model_fields["database_url"].default
+    if settings.database_url == local_default:
+        problems.append(
+            "DATABASE_URL still points at the local docker-compose default "
+            f"({local_default!r}); point it at your production database"
+        )
+
+    if problems:
+        raise RuntimeError(
+            "Refusing to start with ENVIRONMENT=production due to unsafe configuration: "
+            + "; ".join(problems)
+        )

@@ -13,6 +13,7 @@ Usage (run from backend/, with the API already running):
     python scripts/admin_cli.py upload --tenant tue --file ./syllabus.pdf
     python scripts/admin_cli.py upload --tenant tue --dir ./tue-documents/
     python scripts/admin_cli.py list-documents --tenant tue
+    python scripts/admin_cli.py delete --tenant tue --document-id <id>
     python scripts/admin_cli.py list-tenants
 """
 
@@ -89,6 +90,15 @@ def list_documents(tenant: str = typer.Option(...)) -> None:
     resp.raise_for_status()
     for d in resp.json():
         typer.echo(f"{d['status']:<10} {d['filename']:<40} chunks={d.get('chunk_count')} pages={d.get('page_count')}")
+
+
+@app.command("delete")
+def delete_document(tenant: str = typer.Option(...), document_id: str = typer.Option(...)) -> None:
+    resp = httpx.delete(f"{API_BASE}/api/admin/tenants/{tenant}/documents/{document_id}", headers=_headers())
+    if resp.status_code >= 400:
+        typer.secho(f"Failed ({resp.status_code}): {resp.text}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1)
+    typer.secho(f"Deleted document '{document_id}' from tenant '{tenant}'.", fg=typer.colors.GREEN)
 
 
 if __name__ == "__main__":

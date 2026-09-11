@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ExtractedDocument:
-    source_id: str          # stable identifier for this document within its tenant (checksum-based)
+    source_id: str          # stable identifier for this "document slot" within its tenant --
+                             # derived from filename, deliberately NOT content/checksum, so an
+                             # edited re-upload keeps the same source_id and its old chunks can
+                             # be found and replaced (see ingestion/pipeline.py:ingest_document)
     title: str
     doc_type: str            # "markdown" | "pdf"
     body: str                # full extracted text (markdown: file body; pdf: concatenated page text)

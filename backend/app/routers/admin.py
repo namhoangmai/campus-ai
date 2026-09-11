@@ -15,8 +15,10 @@ from app.db import get_db
 from app.deps import get_tenant_by_slug, require_admin
 from app.ingestion.pipeline import UnsupportedDocumentType, ingest_document
 from app.models import Document, Tenant
+from app.retrieval.vector_store import get_store
 from app.schemas import DocumentResponse, TenantCreateRequest, TenantCreatedResponse, TenantResponse
 from app.security import generate_widget_key
+from app.storage import get_storage
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
 
@@ -62,3 +64,38 @@ async def upload_document(
 @router.get("/tenants/{slug}/documents", response_model=list[DocumentResponse])
 def list_documents(tenant: Tenant = Depends(get_tenant_by_slug), db: Session = Depends(get_db)) -> list[Document]:
     return db.query(Document).filter(Document.tenant_id == tenant.id).order_by(Document.uploaded_at).all()
+
+
+@router.delete("/tenants/{slug}/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(
+    document_id: str,
+    tenant: Tenant = Depends(get_tenant_by_slug),
+    db: Session = Depends(get_db),
+) -> None:
+    """Removes one document's chunks (vector store), raw file (storage), and Document row.
+    Scoped to `tenant` from the URL path, not just `document_id` alone, so an admin can never
+    delete a document by guessing an id that belongs to a different tenant (404, not 403 -- same
+    "don't even confirm it exists" posture as get_tenant_by_slug/resolve_tenant_from_widget_key).
+    `source_id` (vector store) is the document's filename, not a separately stored field -- see
+    ingestion/pipeline.py:ingest_document, which derives it from filename alone. The raw-storage
+    ref is reconstructed via Storage.raw_ref (app/storage.py) rather than read off a stored
+    column, because Document doesn't persist save_raw()'s return value -- see that method's
+    docstring for why, and the more robust alternative this flags instead of making silently."""
+    document = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.tenant_id == tenant.id)
+        .first()
+    )
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No document '{document_id}' for tenant '{tenant.slug}'.",
+        )
+
+    get_store(tenant.slug).delete_by_source(document.filename)
+
+    storage = get_storage()
+    storage.delete_raw(tenant.slug, storage.raw_ref(tenant.slug, document.checksum, document.filename))
+
+    db.delete(document)
+    db.commit()

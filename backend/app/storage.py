@@ -21,6 +21,20 @@ class Storage(Protocol):
     def delete_raw(self, tenant_slug: str, ref: str) -> None:
         ...
 
+    def raw_ref(self, tenant_slug: str, checksum: str, filename: str) -> str:
+        """Reconstructs the same reference `save_raw` would have returned for a given
+        (tenant, checksum, filename), without that original return value having been persisted
+        anywhere. `Document` (app/models.py) doesn't store save_raw()'s return value today, so a
+        caller that needs to delete a raw file later (routers/admin.py's document-delete route)
+        has to rebuild the reference from the checksum + filename it already has on the Document
+        row, using the exact same convention ingestion/pipeline.py:ingest_document used to build
+        the `filename` argument it originally passed to `save_raw`. This is a reconstruction,
+        not a lookup — if that convention ever changes, this must change with it. The more
+        robust fix is persisting `save_raw`'s return value as a real Document column, but that
+        needs an ingestion/pipeline.py + models.py change outside this agent's lane; flagged,
+        not made, here."""
+        ...
+
 
 class LocalDiskStorage:
     """Local-disk implementation used for the current (localhost) deployment target."""
@@ -34,6 +48,9 @@ class LocalDiskStorage:
         path = Path(ref)
         if path.exists():
             path.unlink()
+
+    def raw_ref(self, tenant_slug: str, checksum: str, filename: str) -> str:
+        return str(raw_dir(tenant_slug) / f"{checksum}__{filename}")
 
 
 def get_storage() -> Storage:

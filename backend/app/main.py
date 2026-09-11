@@ -12,12 +12,13 @@ loaded in a REPL — no bootstrap required.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.config import get_settings, validate_production_settings
 from app.routers import admin, chat, health
 
 app = FastAPI(title="Campus-AI API")
 
 settings = get_settings()
+validate_production_settings(settings)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

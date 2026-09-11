@@ -47,6 +47,20 @@ class _FakeHashEmbeddingFunction:
             vectors.append([v / norm for v in vec])
         return vectors
 
+    @staticmethod
+    def name() -> str:
+        # chromadb 1.5.x's EmbeddingFunction protocol requires this (used to detect a mismatch
+        # between the embedding function passed in and whatever was persisted for an existing
+        # collection) — without it, get_or_create_collection raises AttributeError on any
+        # collection created under test (see chromadb/api/collection_configuration.py).
+        return "fake_hash"
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:
+        # chromadb's real EmbeddingFunction base class provides this (defaulting to __call__)
+        # for classes that subclass it; this class doesn't, so it needs its own — chromadb's
+        # Collection.query() calls embed_query(), not __call__(), on the query side.
+        return self(input)
+
 
 @lru_cache(maxsize=1)
 def _embedding_function():

@@ -39,30 +39,47 @@ def _doc_type_for(filename: str) -> str:
 
 
 def ingest_document(db: Session, tenant: Tenant, filename: str, content: bytes) -> Document:
-    """Idempotent: re-uploading the same bytes for the same tenant returns the existing,
-    already-indexed Document row untouched rather than re-parsing and re-embedding it."""
+    """Idempotent per (tenant, filename) -- that pair is "this document slot," independent of
+    content. Re-uploading identical bytes for an already-indexed document returns the existing
+    row untouched. Re-uploading an *edited* file (same filename, different content) reuses the
+    same Document row and the same `source_id` (see below) so the old chunks can actually be
+    found and replaced, instead of leaving a stale orphaned set behind under a source_id nothing
+    else references any more -- see ARCHITECTURE.md §4.6."""
     checksum = _checksum(content)
+    doc_type = _doc_type_for(filename)
+    # Stable per (tenant, filename), NOT derived from content -- a tenant's vector store is
+    # already its own isolated collection, so filename alone is a safe, sufficient key within
+    # it. This has to stay content-independent specifically so `delete_by_source()` below finds
+    # the *previous* version's chunks on a re-upload rather than a source_id nothing was ever
+    # upserted under.
+    source_id = filename
 
-    existing = (
+    document = (
         db.query(Document)
-        .filter(Document.tenant_id == tenant.id, Document.checksum == checksum, Document.status == "indexed")
+        .filter(Document.tenant_id == tenant.id, Document.filename == filename)
         .first()
     )
-    if existing is not None:
-        return existing
+    if document is not None and document.checksum == checksum and document.status == "indexed":
+        return document
 
-    doc_type = _doc_type_for(filename)
-    source_id = f"{checksum}__{filename}"
-
-    document = Document(
-        tenant_id=tenant.id,
-        filename=filename,
-        doc_type=doc_type,
-        title=filename,
-        status="processing",
-        checksum=checksum,
-    )
-    db.add(document)
+    if document is None:
+        document = Document(
+            tenant_id=tenant.id,
+            filename=filename,
+            doc_type=doc_type,
+            title=filename,
+            status="processing",
+            checksum=checksum,
+        )
+        db.add(document)
+    else:
+        # Same (tenant, filename) slot, different content (or a retry of a failed/incomplete
+        # previous attempt) -- update this row in place rather than inserting a second one, so
+        # there is exactly one Document row per logical document, not one per upload.
+        document.doc_type = doc_type
+        document.status = "processing"
+        document.checksum = checksum
+        document.error_message = None
     db.commit()
     db.refresh(document)
 
