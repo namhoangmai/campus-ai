@@ -1,10 +1,59 @@
-# Local development Postgres for the control plane (ARCHITECTURE.md §3, §9). This is the one
-# piece of "cloud-ready" infrastructure worth running locally now: the whole point of using
-# Postgres instead of e.g. SQLite for the control plane is that swapping DATABASE_URL to a
-# managed Postgres later (RDS/Neon/Supabase) is a config change, not a migration — see
-# ARCHITECTURE.md §9's local -> cloud table. Nothing else in the stack needs a container: the
-# content plane is local disk (data/tenants/), and the backend/frontend run directly via
-# uvicorn/npm for this phase (containerizing them is explicitly deferred, ARCHITECTURE.md §12).
+# Campus-AI — local full-stack parity compose file.
+#
+# WHAT THIS IS: a way to run the entire production-shaped topology (Postgres, Redis, Qdrant,
+# backend API, ingestion worker, frontend) on your own machine, built from the exact same
+# Dockerfiles a real deployment would build from, so integration problems (a wrong env var name,
+# a code path that only breaks once Redis/Qdrant/S3 are real instead of absent, a Next.js env
+# var baked in wrong) surface here instead of as a failed Railway deploy. It's also usable as-is
+# for self-hosting this stack somewhere that isn't Railway (any Docker host that can run
+# docker compose).
+#
+# WHAT THIS IS NOT: the Railway deployment mechanism. Railway does not read this file -- it
+# builds each service from its own Dockerfile (backend/Dockerfile for the API; the SAME image
+# again with an overridden start command for the worker; frontend/Dockerfile for the frontend)
+# and wires them together via Railway's own Postgres/Redis plugins and env-var references. See
+# the "Railway deployment steps" doc that shipped alongside this file for the actual operator
+# steps -- this compose file exists purely so that topology can be reproduced and poked at
+# locally first.
+#
+# TWO WAYS TO USE THIS FILE:
+#   docker compose up -d                  -> unchanged from before this file existed: Postgres
+#                                             only, for the documented local-dev flow
+#                                             (AGENTS.md/CLAUDE.md §2/§3) where backend/frontend
+#                                             run directly via bare `uvicorn`/`npm run dev`, not
+#                                             containers. Kept working on purpose -- see below.
+#   docker compose --profile full up -d   -> the full production-shaped stack: adds redis,
+#                                             qdrant, backend, worker, frontend.
+# `postgres` carries no `profiles:` key, so it's part of both the plain command above (Compose
+# always starts profile-less services) and `--profile full`. Everything else is gated behind
+# the "full" profile specifically so today's quick-iteration workflow keeps working unchanged.
+#
+# BEFORE RUNNING --profile full: copy .env.example to .env at the repo root and fill in at least
+# ADMIN_API_KEY and OPENROUTER_API_KEY. backend/worker below set ENVIRONMENT=production (see
+# app/config.py:validate_production_settings) deliberately, so this is a real exercise of the
+# production-safety startup guard, not just the Tier 2 code paths -- leaving ADMIN_API_KEY or
+# OPENROUTER_API_KEY blank crash-loops the backend/worker containers here exactly as it would in
+# a real deployment, on purpose, rather than quietly passing an empty string through.
+#
+# NEXT_PUBLIC_API_URL NUANCE: Next.js inlines this into the browser-side JS bundle at BUILD
+# time, not at container-start time -- so it must be a URL your own browser can reach (the
+# host-published port, http://localhost:8000), never the internal Docker network hostname
+# (http://backend:8000) that backend/worker use to reach each other. Passed as both a build arg
+# and a runtime env var below; frontend/Dockerfile must declare `ARG NEXT_PUBLIC_API_URL` and
+# turn it into an `ENV` *before* running `next build` for this to actually take effect -- a
+# Dockerfile that only sets it at container-start time will silently ship the
+# http://localhost:8000 default baked into the bundle regardless of what's set here.
+#
+# KNOWN GAP: frontend/Dockerfile does not exist in this repo as of the commit that added this
+# compose file -- the `frontend` service below will fail to build until someone adds one.
+# Flagged here rather than fabricated (frontend/ is outside this agent's lane).
+#
+# VOLUME PERMISSIONS: backend/Dockerfile and Dockerfile.worker both run as a non-root user with
+# a fixed uid/gid (10001:10001) baked in specifically so `tenant-data-permissions` below can
+# chown the named `campus_ai_tenant_data` volume to the right owner before backend/worker start
+# -- a fresh named volume is created root-owned by the Docker engine, which would otherwise make
+# every raw_dir()/mkdir call inside the container fail with a permission error the first time
+# S3_BUCKET is left unset.
 
 services:
   postgres:
@@ -17,6 +66,143 @@ services:
       - "5432:5432"
     volumes:
       - campus_ai_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campus_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["full"]
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - campus_ai_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    profiles: ["full"]
+    ports:
+      - "6333:6333"
+    volumes:
+      - campus_ai_qdrant_data:/qdrant/storage
+
+  # One-shot: fixes campus_ai_tenant_data's ownership before backend/worker touch it. See the
+  # "VOLUME PERMISSIONS" header comment above for why this is needed at all.
+  tenant-data-permissions:
+    image: busybox
+    profiles: ["full"]
+    command: ["chown", "-R", "10001:10001", "/data"]
+    volumes:
+      - campus_ai_tenant_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: campus-ai-backend  # shared with `worker` below: same image, different command
+    profiles: ["full"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      tenant-data-permissions:
+        condition: service_completed_successfully
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg2://campus_ai:campus_ai@postgres:5432/campus_ai
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      # Left as an empty string (not `:?required`) when unset, on purpose -- see the header
+      # comment: this should exercise validate_production_settings' real crash-loop, not Compose
+      # refusing to start.
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GENERATION_MODEL: ${GENERATION_MODEL:-deepseek/deepseek-v4-flash-0731}
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:3000}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_REGION: ${S3_REGION:-auto}
+    ports:
+      - "8000:8000"
+    volumes:
+      - campus_ai_tenant_data:/app/data/tenants
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: campus-ai-backend
+    profiles: ["full"]
+    # Run as a module, not a bare script path: `python scripts/worker.py` puts scripts/ (not
+    # backend/) on sys.path and `app` won't import -- see scripts/worker.py's own docstring for
+    # the full explanation. NOTE for whoever works through the "Railway deployment steps" doc's
+    # step 6: the same applies there too -- the worker service's start-command override on
+    # Railway must be `python -m scripts.worker`, not the `python scripts/worker.py` form
+    # written in that doc; that literal form crash-loops with `ModuleNotFoundError: No module
+    # named 'app'`, confirmed while building this compose file.
+    command: ["python", "-m", "scripts.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Not in the original spec for this service (only redis+postgres were asked for), added
+      # anyway: this worker calls ingest_document() -> get_store(), which talks to Qdrant
+      # whenever QDRANT_URL is set (it is, below) -- starting the worker before Qdrant exists
+      # would just fail its first job instead of waiting the few extra seconds Qdrant needs.
+      qdrant:
+        condition: service_started
+      tenant-data-permissions:
+        condition: service_completed_successfully
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg2://campus_ai:campus_ai@postgres:5432/campus_ai
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GENERATION_MODEL: ${GENERATION_MODEL:-deepseek/deepseek-v4-flash-0731}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_REGION: ${S3_REGION:-auto}
+    volumes:
+      - campus_ai_tenant_data:/app/data/tenants
+
+  frontend:
+    # KNOWN GAP (see header comment): frontend/Dockerfile does not exist yet in this repo --
+    # this service will fail `docker compose --profile full up` until one is added.
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # See the "NEXT_PUBLIC_API_URL NUANCE" header comment -- this must be the host-reachable
+        # URL, not the internal `http://backend:8000` DATABASE_URL/REDIS_URL/QDRANT_URL use above.
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    profiles: ["full"]
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
 
 volumes:
   campus_ai_postgres_data:
+  campus_ai_redis_data:
+  campus_ai_qdrant_data:
+  campus_ai_tenant_data:

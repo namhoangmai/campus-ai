@@ -67,7 +67,11 @@ COPY . .
 # ---- Runtime: slim image, no compiler, non-root ----
 FROM python:3.12-slim AS runtime
 
-RUN groupadd --system app && useradd --system --gid app --home /app app
+# Fixed uid/gid (not left to useradd's default allocation) so a docker-compose.yml volume-
+# permission-fixing step (or any other external chown) can target a known, stable value instead
+# of having to introspect the image first -- see docker-compose.yml's tenant-data-permissions
+# service.
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app --home /app app
 
 ENV PATH="/opt/venv/bin:$PATH" \
     HF_HOME=/opt/hf-cache \

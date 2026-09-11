@@ -22,6 +22,11 @@ pdfplumber
 # Embeddings + vector store
 sentence-transformers
 chromadb
+# qdrant-client: retrieval/vector_store.py:QdrantVectorStore's dependency, imported lazily only
+# when QDRANT_URL is set (ARCHITECTURE.md §2/§9's scaling-ceiling swap) -- listed here because it
+# was missing from this file despite the code already depending on it (found while validating
+# docker-compose.yml's qdrant service against a real build; not otherwise this agent's lane).
+qdrant-client==1.19.0
 
 # Generation (OpenRouter)
 openai

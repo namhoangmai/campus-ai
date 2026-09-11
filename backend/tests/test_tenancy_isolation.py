@@ -8,15 +8,19 @@ returned by a real query, a real credential resolving to a real tenant) rather t
 """
 
 import uuid
+from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from app.deps import resolve_tenant_from_widget_key
 from app.ingestion.pipeline import ingest_document
-from app.models import Tenant
+from app.models import Document, Tenant
 from app.retrieval.retriever import retrieve
 from app.retrieval.vector_store import get_store
+from app.routers.admin import delete_document
 from app.security import generate_widget_key
+from app.storage import get_storage
 from app.tenancy.store_paths import _safe_slug, vector_dir
 
 
@@ -124,7 +128,10 @@ def test_deleting_one_tenants_document_does_not_touch_the_other(db_session, two_
     doc_a = ingest_document(db_session, tenant_a, "a.md", _markdown("A", "KEEP_ME_A"))
     ingest_document(db_session, tenant_b, "b.md", _markdown("B", "KEEP_ME_B"))
 
-    get_store(tenant_a.slug).delete_by_source(f"{doc_a.checksum}__a.md")
+    # source_id is the filename alone (ingestion/pipeline.py:ingest_document), not
+    # f"{checksum}__{filename}" -- it has to stay content-independent so a re-upload of an
+    # edited file can find and replace its own previous chunks (see the regression test below).
+    get_store(tenant_a.slug).delete_by_source("a.md")
 
     results_for_a = retrieve(tenant_a.slug, "marker", k=20)
     results_for_b = retrieve(tenant_b.slug, "marker", k=20)
@@ -137,3 +144,89 @@ def test_deleting_one_tenants_document_does_not_touch_the_other(db_session, two_
 def test_unsafe_tenant_slugs_are_rejected_before_touching_the_filesystem(malicious_slug):
     with pytest.raises(ValueError):
         _safe_slug(malicious_slug)
+
+
+def test_reuploading_an_edited_document_updates_the_same_row_with_no_orphaned_chunks(db_session, two_tenants):
+    """Regression test for the document-edit bug in ingest_document (app/ingestion/pipeline.py).
+
+    Before the fix: re-uploading an edited file under the same filename (a) matched the existing
+    Document row only by checksum, so it always inserted a *second* row for the same logical
+    document instead of updating the first, and (b) derived source_id from the checksum, so
+    delete_by_source() -- called with the *new* content's source_id, which nothing was ever
+    upserted under -- never found the previous version's chunks, leaving them orphaned in the
+    vector store forever under a source_id nothing referenced any more. This test fails against
+    that pre-fix behavior and passes against the current fix."""
+    tenant_a, _ = two_tenants
+
+    original = ingest_document(
+        db_session, tenant_a, "handbook.md", _markdown("Handbook", "ORIGINAL_CONTENT_MARKER_444")
+    )
+    assert original.status == "indexed"
+
+    edited = ingest_document(
+        db_session, tenant_a, "handbook.md", _markdown("Handbook", "EDITED_CONTENT_MARKER_555")
+    )
+    assert edited.status == "indexed"
+
+    # Exactly one current Document row for this (tenant, filename) -- not one per upload.
+    assert edited.id == original.id
+    rows = (
+        db_session.query(Document)
+        .filter(Document.tenant_id == tenant_a.id, Document.filename == "handbook.md")
+        .all()
+    )
+    assert len(rows) == 1
+
+    # No orphaned chunks left behind from the pre-edit version.
+    results = get_store(tenant_a.slug).query("marker", k=20)
+    assert any("EDITED_CONTENT_MARKER_555" in r["content"] for r in results)
+    assert not any("ORIGINAL_CONTENT_MARKER_444" in r["content"] for r in results)
+
+
+def test_delete_document_removes_it_for_its_tenant_without_touching_the_other(db_session, two_tenants):
+    """Coverage for the DELETE endpoint (routers/admin.py:delete_document): removes the Document
+    row, the raw file, and the vector-store chunks for the deleted document, and touches none of
+    that for a different tenant -- same isolation guarantee the rest of this module exercises for
+    ingestion and retrieval, extended to the deletion path."""
+    tenant_a, tenant_b = two_tenants
+    doc_a = ingest_document(db_session, tenant_a, "a.md", _markdown("A", "DELETE_ME_A"))
+    doc_b = ingest_document(db_session, tenant_b, "b.md", _markdown("B", "KEEP_ME_B"))
+
+    storage = get_storage()
+    raw_ref_a = Path(storage.raw_ref(tenant_a.slug, doc_a.checksum, doc_a.filename))
+    raw_ref_b = Path(storage.raw_ref(tenant_b.slug, doc_b.checksum, doc_b.filename))
+    assert raw_ref_a.exists()
+    assert raw_ref_b.exists()
+
+    delete_document(document_id=doc_a.id, tenant=tenant_a, db=db_session)
+
+    # Document row gone for tenant A; tenant B's row untouched.
+    assert db_session.query(Document).filter(Document.id == doc_a.id).first() is None
+    assert db_session.query(Document).filter(Document.id == doc_b.id).first() is not None
+
+    # Raw file gone for tenant A only.
+    assert not raw_ref_a.exists()
+    assert raw_ref_b.exists()
+
+    # Chunks gone from tenant A's store; tenant B's store untouched.
+    results_for_a = retrieve(tenant_a.slug, "marker", k=20)
+    results_for_b = retrieve(tenant_b.slug, "marker", k=20)
+    assert not any("DELETE_ME_A" in r["content"] for r in results_for_a)
+    assert any("KEEP_ME_B" in r["content"] for r in results_for_b)
+
+
+def test_delete_document_is_scoped_to_the_owning_tenant(db_session, two_tenants):
+    """A document id belonging to tenant B must 404 under tenant A's slug rather than delete it --
+    same "don't even confirm it exists across tenants" posture as resolve_tenant_from_widget_key
+    and get_tenant_by_slug."""
+    tenant_a, tenant_b = two_tenants
+    doc_b = ingest_document(db_session, tenant_b, "b.md", _markdown("B", "CROSS_TENANT_MARKER_777"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        delete_document(document_id=doc_b.id, tenant=tenant_a, db=db_session)
+    assert exc_info.value.status_code == 404
+
+    # Untouched: tenant B's document and chunks are still there.
+    assert db_session.query(Document).filter(Document.id == doc_b.id).first() is not None
+    results_for_b = retrieve(tenant_b.slug, "marker", k=20)
+    assert any("CROSS_TENANT_MARKER_777" in r["content"] for r in results_for_b)
