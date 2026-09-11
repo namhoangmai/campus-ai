@@ -3,11 +3,18 @@
 See ARCHITECTURE.md §7 for the full reasoning behind the two-tier credential model. This file
 is the only place that knows what an admin key or a widget key *is* — routers never compare
 raw strings themselves.
+
+Also the single place that turns REDIS_URL into a client (`get_redis_connection`) — used by the
+rate limiter below, and imported from here by routers/admin.py (enqueuing an ingestion job) and
+scripts/worker.py (consuming it), so all three agree on how to reach the same Redis instance
+(ARCHITECTURE.md §9/§12's Tier 2 swap).
 """
 
 import secrets
 import time
 from collections import defaultdict
+
+import redis
 
 from app.config import get_settings
 
@@ -27,6 +34,13 @@ def is_admin_key_valid(presented_key: str | None) -> bool:
     if not settings.admin_api_key or not presented_key:
         return False
     return secrets.compare_digest(presented_key, settings.admin_api_key)
+
+
+def get_redis_connection() -> redis.Redis:
+    settings = get_settings()
+    if not settings.redis_url:
+        raise RuntimeError("REDIS_URL is not set.")
+    return redis.Redis.from_url(settings.redis_url)
 
 
 class InMemoryRateLimiter:
@@ -54,11 +68,36 @@ class InMemoryRateLimiter:
         return self._count[key] <= self._limit
 
 
-_rate_limiter: InMemoryRateLimiter | None = None
+class RedisRateLimiter:
+    """Same `allow(key) -> bool` fixed-window shape as `InMemoryRateLimiter`, but the counters
+    live in Redis instead of process memory, so every backend process/instance shares them —
+    the Tier 2 swap ARCHITECTURE.md §9 names for the moment there's more than one instance.
+    INCR-then-EXPIRE isn't perfectly atomic on the very first request of a new window (a second
+    process could INCR before the first process's EXPIRE lands), but that's the same
+    approximate-fixed-window behavior `InMemoryRateLimiter` already has, not a regression.
+    """
+
+    def __init__(self, client: redis.Redis, limit_per_minute: int) -> None:
+        self._client = client
+        self._limit = limit_per_minute
+
+    def allow(self, key: str) -> bool:
+        redis_key = f"campus_ai:ratelimit:{key}"
+        count = self._client.incr(redis_key)
+        if count == 1:
+            self._client.expire(redis_key, 60)
+        return count <= self._limit
 
 
-def get_rate_limiter() -> InMemoryRateLimiter:
+_rate_limiter: InMemoryRateLimiter | RedisRateLimiter | None = None
+
+
+def get_rate_limiter() -> InMemoryRateLimiter | RedisRateLimiter:
     global _rate_limiter
     if _rate_limiter is None:
-        _rate_limiter = InMemoryRateLimiter(get_settings().chat_rate_limit_per_minute)
+        settings = get_settings()
+        if settings.redis_url:
+            _rate_limiter = RedisRateLimiter(get_redis_connection(), settings.chat_rate_limit_per_minute)
+        else:
+            _rate_limiter = InMemoryRateLimiter(settings.chat_rate_limit_per_minute)
     return _rate_limiter

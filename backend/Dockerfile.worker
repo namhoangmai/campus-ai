@@ -1,0 +1,57 @@
+# Campus-AI ingestion worker — Tier 2 (ARCHITECTURE.md §9/§12): consumes the background-job
+# queue that routers/admin.py:upload_document enqueues to when REDIS_URL is set. Deploy as its
+# own Railway service, off the same repo, with the SAME REDIS_URL / DATABASE_URL /
+# TENANT_DATA_DIR / S3_* env vars as the API service (backend/Dockerfile) — this worker calls the
+# same ingestion pipeline against the same control-plane DB and the same content-plane storage,
+# just from a different process. If REDIS_URL is unset on the API, this worker has no queue to
+# read from and should not be deployed at all (the API falls back to synchronous ingestion).
+#
+#   docker build -t campus-ai-worker -f Dockerfile.worker .        (run from backend/)
+#
+# REQUIRED VOLUME: same as backend/Dockerfile — TENANT_DATA_DIR must be the SAME persistent
+# volume the API service uses (this worker is the process that actually writes into it, via
+# app.ingestion.pipeline.ingest_document -> app/retrieval's per-tenant Chroma store, and via
+# app/storage.py when S3_BUCKET is unset). Two different volumes for the API and worker
+# services would silently split the content plane in two.
+
+# ---- Builder: install deps into a venv, bake the embedding model into the image ----
+FROM python:3.12-slim AS builder
+
+# hnswlib (a chromadb dependency) needs a compiler if no prebuilt wheel matches this platform.
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_NO_CACHE_DIR=1
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /app/backend
+COPY requirements.txt .
+RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+
+# Bake BAAI/bge-m3 into the image, same reasoning as backend/Dockerfile: this worker is the
+# process that actually calls the embedding model (via ingest_document -> get_store), so it
+# needs the same cache backend/Dockerfile's API image has, not a re-download on its first job.
+ENV HF_HOME=/opt/hf-cache
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
+
+COPY . .
+
+# ---- Runtime: slim image, no compiler, non-root ----
+FROM python:3.12-slim AS runtime
+
+RUN groupadd --system app && useradd --system --gid app --home /app app
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    HF_HOME=/opt/hf-cache \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app/backend
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/hf-cache /opt/hf-cache
+COPY --from=builder /app/backend /app/backend
+
+RUN chown -R app:app /app
+USER app
+
+CMD ["python", "-m", "scripts.worker"]

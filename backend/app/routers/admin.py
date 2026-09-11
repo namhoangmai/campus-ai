@@ -9,15 +9,17 @@ routes are allowed to name any tenant, because the admin key itself is the trust
 """
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from rq import Queue
 from sqlalchemy.orm import Session
 
-from app.db import get_db
+from app.config import INGESTION_QUEUE_NAME, get_settings
+from app.db import SessionLocal, get_db
 from app.deps import get_tenant_by_slug, require_admin
-from app.ingestion.pipeline import UnsupportedDocumentType, ingest_document
+from app.ingestion.pipeline import UnsupportedDocumentType, _checksum, _doc_type_for, ingest_document
 from app.models import Document, Tenant
 from app.retrieval.vector_store import get_store
 from app.schemas import DocumentResponse, TenantCreateRequest, TenantCreatedResponse, TenantResponse
-from app.security import generate_widget_key
+from app.security import generate_widget_key, get_redis_connection
 from app.storage import get_storage
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
@@ -48,6 +50,30 @@ def get_tenant(tenant: Tenant = Depends(get_tenant_by_slug)) -> Tenant:
     return tenant
 
 
+def process_ingestion_job(tenant_id: str, filename: str, content: bytes) -> None:
+    """The background job `upload_document` enqueues below (via RQ, only when REDIS_URL is set)
+    instead of calling `ingest_document` inline. Executes in scripts/worker.py's process, not
+    this API process -- RQ serializes only these three plain values into Redis, never a live
+    Session or ORM object, which can't survive a trip through a job queue into another process
+    -- so this opens its own DB session rather than reusing a request-scoped one.
+    `ingestion/pipeline.py:ingest_document` itself needed zero changes for this (per its own
+    module docstring)."""
+    db = SessionLocal()
+    try:
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if tenant is None:
+            raise ValueError(f"Tenant '{tenant_id}' no longer exists; dropping ingestion job for {filename!r}.")
+        ingest_document(db, tenant, filename, content)
+    finally:
+        db.close()
+
+
+def _enqueue_ingestion(tenant_id: str, filename: str, content: bytes) -> None:
+    Queue(INGESTION_QUEUE_NAME, connection=get_redis_connection()).enqueue(
+        process_ingestion_job, tenant_id, filename, content
+    )
+
+
 @router.post("/tenants/{slug}/documents", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
@@ -55,10 +81,56 @@ async def upload_document(
     db: Session = Depends(get_db),
 ) -> Document:
     content = await file.read()
+    filename = file.filename or "untitled"
+
+    if not get_settings().redis_url:
+        # Local/test default: no Redis configured, ingest synchronously -- unchanged behavior.
+        try:
+            return ingest_document(db, tenant, filename, content)
+        except UnsupportedDocumentType as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    # Background-job path (ARCHITECTURE.md §9/§12 Tier 2): validate the extension synchronously
+    # so a bad upload is still an immediate 422, not a job that fails a minute later; create (or
+    # refresh) the Document row as "processing" right away and return it; hand the actual
+    # parse/chunk/embed work to scripts/worker.py over the same Redis instance the rate limiter
+    # uses. GET .../documents already lets a caller poll `status` for when it flips to
+    # "indexed"/"failed" -- confirmed no new polling endpoint is needed.
+    #
+    # This duplicates ingest_document's row-lookup/upsert logic (ingestion/pipeline.py) rather
+    # than reusing it, because that function does the row upsert *and* the actual ingestion work
+    # in one call with no way to ask for just the row half -- and ingestion/pipeline.py is out of
+    # this agent's lane to change. Flagged in the job report rather than fixed silently.
     try:
-        return ingest_document(db, tenant, file.filename or "untitled", content)
+        doc_type = _doc_type_for(filename)
     except UnsupportedDocumentType as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    checksum = _checksum(content)
+
+    document = (
+        db.query(Document)
+        .filter(Document.tenant_id == tenant.id, Document.filename == filename)
+        .first()
+    )
+    if document is not None and document.checksum == checksum and document.status == "indexed":
+        return document
+
+    if document is None:
+        document = Document(
+            tenant_id=tenant.id, filename=filename, doc_type=doc_type,
+            title=filename, status="processing", checksum=checksum,
+        )
+        db.add(document)
+    else:
+        document.doc_type = doc_type
+        document.status = "processing"
+        document.checksum = checksum
+        document.error_message = None
+    db.commit()
+    db.refresh(document)
+
+    _enqueue_ingestion(tenant.id, filename, content)
+    return document
 
 
 @router.get("/tenants/{slug}/documents", response_model=list[DocumentResponse])

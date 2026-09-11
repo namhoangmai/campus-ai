@@ -29,6 +29,14 @@ openai
 # Admin CLI
 typer
 
+# Tier 2 cloud infra (ARCHITECTURE.md §9/§12): S3-compatible object storage (Cloudflare R2 by
+# default), Redis-backed rate limiting, RQ background-job ingestion. Pinned (unlike the rest of
+# this file today, a pre-existing gap -- see backend/Dockerfile's header comment) since these
+# were added together for one deployment target and should move together.
+boto3==1.43.92
+redis==8.1.0
+rq==2.12.0
+
 # NOTE on reranking: v1 carried `FlagEmbedding` as an installed-but-unused dependency earmarked
 # for future reranking. It's deliberately dropped here rather than carried forward again: it
 # failed to build against this project's toolchain (setuptools incompatibility) and, per
