@@ -1,10 +1,29 @@
 .env
 .env.*
 !.env.example
-
-GUIDE.md
+!.env.local.example
 
 AGENTS.md
 PRD.md
 ARCHITECTURE-ESSENTIALS.md
 ARCHITECTURE.md
+CLAUDE.md
+MIGRATION.md
+FILES.md
+
+# Generated content-plane data (per-tenant raw documents + vector stores) -- never hand-edit,
+# regenerate via the ingestion pipeline. See ARCHITECTURE.md §3.
+data/tenants/
+
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+
+WORKSTREAMS.md
+
+.agent/

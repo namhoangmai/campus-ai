@@ -1,3 +1,14 @@
+/**
+ * Backend API client for the widget chat UI.
+ *
+ * Replaces v1's api.ts, which mixed chat calls with TU/e-scraping-specific calls
+ * (getProgramTypes/getProgramOptions/scrapeSelection) that no longer exist on the v2 backend
+ * (ARCHITECTURE.md §7 — those endpoints were retired with the scraping pipeline). The one call
+ * that remains, sendChat, now requires a widget key: every request carries `X-Widget-Key`, and
+ * the response's Source shape now covers both markdown (url) and PDF (page) citations instead
+ * of assuming every source has a URL.
+ */
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
 
@@ -10,32 +21,14 @@ export interface ChatMessage {
 
 export interface Source {
   title: string;
-  url: string;
-}
-
-export interface LivePage {
-  title: string;
-  url: string;
-  body: string;
-}
-
-export interface ProgramOptionsResponse {
-  programs: [string, string][];
-  countries: [string, string][];
-}
-
-export interface ScrapeRequest {
-  program_type_label: string;
-  program_type_slug: string;
-  program_label: string;
-  country_code: string;
-  country_label_by_code: Record<string, string>;
+  doc_type: "markdown" | "pdf";
+  url: string | null;
+  page: number | null;
 }
 
 export interface ChatRequest {
   question: string;
   chat_history: ChatMessage[];
-  live_page: LivePage | null;
 }
 
 export interface ChatResponse {
@@ -43,20 +36,19 @@ export interface ChatResponse {
   sources: Source[];
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function apiFetch<T>(path: string, widgetKey: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        "X-Widget-Key": widgetKey,
         ...(init?.headers || {}),
       },
     });
   } catch {
-    throw new Error(
-      `Could not reach the backend at ${API_BASE_URL}. Is it running? (uvicorn backend.main:app --reload --port 8000)`
-    );
+    throw new Error(`Could not reach the Campus-AI backend at ${API_BASE_URL}. Is it running?`);
   }
 
   if (!res.ok) {
@@ -73,24 +65,8 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function getProgramTypes(): Promise<Record<string, string>> {
-  return apiFetch<Record<string, string>>("/api/program-types");
-}
-
-export function getProgramOptions(programTypeSlug: string): Promise<ProgramOptionsResponse> {
-  const params = new URLSearchParams({ program_type_slug: programTypeSlug });
-  return apiFetch<ProgramOptionsResponse>(`/api/program-options?${params.toString()}`);
-}
-
-export function scrapeSelection(req: ScrapeRequest): Promise<LivePage> {
-  return apiFetch<LivePage>("/api/scrape", {
-    method: "POST",
-    body: JSON.stringify(req),
-  });
-}
-
-export function sendChat(req: ChatRequest): Promise<ChatResponse> {
-  return apiFetch<ChatResponse>("/api/chat", {
+export function sendChat(widgetKey: string, req: ChatRequest): Promise<ChatResponse> {
+  return apiFetch<ChatResponse>("/api/chat", widgetKey, {
     method: "POST",
     body: JSON.stringify(req),
   });

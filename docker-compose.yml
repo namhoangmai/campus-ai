@@ -1,0 +1,22 @@
+# Local development Postgres for the control plane (ARCHITECTURE.md §3, §9). This is the one
+# piece of "cloud-ready" infrastructure worth running locally now: the whole point of using
+# Postgres instead of e.g. SQLite for the control plane is that swapping DATABASE_URL to a
+# managed Postgres later (RDS/Neon/Supabase) is a config change, not a migration — see
+# ARCHITECTURE.md §9's local -> cloud table. Nothing else in the stack needs a container: the
+# content plane is local disk (data/tenants/), and the backend/frontend run directly via
+# uvicorn/npm for this phase (containerizing them is explicitly deferred, ARCHITECTURE.md §12).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: campus_ai
+      POSTGRES_PASSWORD: campus_ai
+      POSTGRES_DB: campus_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - campus_ai_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  campus_ai_postgres_data:

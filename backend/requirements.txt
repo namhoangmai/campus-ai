@@ -1,2 +1,41 @@
-fastapi
-uvicorn[standard]
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12   # required by FastAPI for multipart/form-data (document upload endpoint)
+
+# Config / env
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+
+# Control-plane database (Postgres)
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+
+# Content plane: markdown ingestion
+python-frontmatter==1.1.0
+langchain_text_splitters==0.3.0
+
+# Content plane: PDF ingestion
+pdfplumber==0.11.4
+
+# Embeddings + vector store
+sentence-transformers==3.1.1
+chromadb==0.5.11
+
+# Generation (OpenRouter)
+openai==1.51.0
+
+# Admin CLI
+typer==0.12.5
+
+# NOTE on reranking: v1 carried `FlagEmbedding` as an installed-but-unused dependency earmarked
+# for future reranking. It's deliberately dropped here rather than carried forward again: it
+# failed to build against this project's toolchain (setuptools incompatibility) and, per
+# ARCHITECTURE.md §12, reranking is still unbuilt/unmeasured work. When reranking is actually
+# implemented, pick and pin a rerank dependency then (a maintained cross-encoder, e.g. via
+# `sentence-transformers`, is already available above) rather than resurrecting a broken pin.
+
+# Tests
+pytest==8.3.3
+httpx==0.27.2
