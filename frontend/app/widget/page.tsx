@@ -35,6 +35,7 @@ import { useSearchParams } from "next/navigation";
 import { ChatMessage, Source, isAbortError, sendChat } from "@/lib/api";
 import {
   StoredConversation,
+  deleteConversation,
   formatRelativeTime,
   isStorageAvailable,
   loadConversations,
@@ -112,6 +113,17 @@ function WidgetChat() {
     setConversationId(conversation.id);
     setChatError(null);
     setShowHistory(false);
+  }
+
+  function handleDeleteConversation(conversation: StoredConversation) {
+    if (!window.confirm(`Delete "${conversation.title}"? This can't be undone.`)) return;
+    deleteConversation(widgetKey as string, conversation.id);
+    setConversations((prev) => prev.filter((c) => c.id !== conversation.id));
+    // The autosave effect would otherwise re-save this id on the next message, silently
+    // resurrecting a "deleted" conversation — reset to a fresh one instead.
+    if (conversation.id === conversationId) {
+      handleNewConversation();
+    }
   }
 
   function handleNewConversation() {
@@ -192,7 +204,11 @@ function WidgetChat() {
       </div>
 
       {showHistory ? (
-        <HistoryList conversations={conversations} onSelect={handleSelectConversation} />
+        <HistoryList
+          conversations={conversations}
+          onSelect={handleSelectConversation}
+          onDelete={handleDeleteConversation}
+        />
       ) : (
         <>
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
@@ -245,9 +261,11 @@ function WidgetChat() {
 function HistoryList({
   conversations,
   onSelect,
+  onDelete,
 }: {
   conversations: StoredConversation[];
   onSelect: (conversation: StoredConversation) => void;
+  onDelete: (conversation: StoredConversation) => void;
 }) {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -260,14 +278,23 @@ function HistoryList({
       ) : (
         <ul className="space-y-2">
           {conversations.map((conversation) => (
-            <li key={conversation.id}>
+            <li key={conversation.id} className="flex items-stretch gap-1">
               <button
                 type="button"
                 onClick={() => onSelect(conversation)}
-                className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-left hover:bg-neutral-50"
+                className="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-left hover:bg-neutral-50"
               >
                 <p className="truncate text-sm font-medium text-neutral-900">{conversation.title}</p>
                 <p className="text-xs text-neutral-400">{formatRelativeTime(conversation.updatedAt)}</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(conversation)}
+                aria-label={`Delete conversation "${conversation.title}"`}
+                title="Delete conversation"
+                className="rounded-lg border border-neutral-200 px-2 text-xs text-neutral-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+              >
+                Delete
               </button>
             </li>
           ))}

@@ -70,6 +70,15 @@ export function saveConversation(widgetKey: string, conversation: StoredConversa
   }
 }
 
+export function deleteConversation(widgetKey: string, id: string): void {
+  try {
+    const next = loadConversations(widgetKey).filter((c) => c.id !== id);
+    window.localStorage.setItem(historyKey(widgetKey), JSON.stringify(next));
+  } catch {
+    // Storage unavailable — nothing to delete, chat stays in-memory only.
+  }
+}
+
 export function makeConversationId(): string {
   try {
     return crypto.randomUUID();
