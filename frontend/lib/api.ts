@@ -36,6 +36,16 @@ export interface ChatResponse {
   sources: Source[];
 }
 
+// A user-initiated Stop aborts the in-flight fetch, which rejects with this rather than a real
+// network failure — callers need to tell the two apart so "you clicked Stop" doesn't render as
+// "the backend is unreachable".
+export function isAbortError(err: unknown): boolean {
+  return (
+    (typeof DOMException !== "undefined" && err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
 async function apiFetch<T>(path: string, widgetKey: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -47,7 +57,8 @@ async function apiFetch<T>(path: string, widgetKey: string, init?: RequestInit):
         ...(init?.headers || {}),
       },
     });
-  } catch {
+  } catch (err) {
+    if (isAbortError(err)) throw err;
     throw new Error(`Could not reach the Campus-AI backend at ${API_BASE_URL}. Is it running?`);
   }
 
@@ -65,9 +76,14 @@ async function apiFetch<T>(path: string, widgetKey: string, init?: RequestInit):
   return res.json() as Promise<T>;
 }
 
-export function sendChat(widgetKey: string, req: ChatRequest): Promise<ChatResponse> {
+export function sendChat(
+  widgetKey: string,
+  req: ChatRequest,
+  signal?: AbortSignal,
+): Promise<ChatResponse> {
   return apiFetch<ChatResponse>("/api/chat", widgetKey, {
     method: "POST",
     body: JSON.stringify(req),
+    signal,
   });
 }
